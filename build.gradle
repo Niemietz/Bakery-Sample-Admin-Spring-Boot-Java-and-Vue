@@ -1,0 +1,78 @@
+import org.springframework.boot.gradle.tasks.bundling.BootJar
+import org.springframework.boot.gradle.tasks.run.BootRun
+
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.5.7'
+    id 'io.spring.dependency-management' version '1.1.7'
+    id "com.github.node-gradle.node" version "7.0.2"
+}
+
+group = 'com.niemietz'
+version = '0.0.1-SNAPSHOT'
+description = 'BakerySample'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17  // ou 21
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.data:spring-data-rest-webmvc'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// ================================================================
+// CONFIGURAÇÃO DO NODE + VUE (essa parte é mágica)
+// ================================================================
+
+node {
+    version = '20.17.0'
+    npmVersion = '10.8.3'
+    download = true                     // baixa o Node se não tiveres
+    // Não uses workDir / npmWorkDir / workDirectory aqui → foram removidos na v7
+}
+
+task buildVue(type: NpmTask, dependsOn: npmInstall) {
+    workingDir = file('frontend')
+    args = ['run', 'build']
+}
+
+task copyVueDist(type: Copy, dependsOn: buildVue) {
+    from 'frontend/dist'
+    into 'src/main/resources/static'
+    // limpa a pasta static antes de copiar (evita lixo antigo)
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+// Faz o bootRun esperar o Vue ser construído
+bootRun.dependsOn copyVueDist
+
+// Faz o JAR final incluir o Vue já construído
+bootJar.dependsOn copyVueDist
+
+// Limpa o dist do Vue quando fizeres clean
+clean {
+    delete file('frontend/dist')
+}
+
+tasks.named('processResources').configure {
+    dependsOn copyVueDist
+}
+
+tasks.processResources.dependsOn copyVueDist
+
+bootRun.dependsOn copyVueDist
+bootJar.dependsOn copyVueDist
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
